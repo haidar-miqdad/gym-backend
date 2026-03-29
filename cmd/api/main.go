@@ -1,7 +1,10 @@
 package main
 
 import (
-	"gym-backend/internal/domain" // Pastikan import domain masuk
+	"gym-backend/internal/delivery"
+	"gym-backend/internal/domain"
+	"gym-backend/internal/repository"
+	"gym-backend/internal/service"
 	"gym-backend/pkg/database"
 	"os"
 
@@ -11,30 +14,23 @@ import (
 )
 
 func main() {
-	// 1. Load environment variables
 	godotenv.Load()
-
-	// 2. Initialize Database
 	db := database.InitDB()
-    
-	// 3. AKTIFKAN INI: Jalankan Migrasi
-	// Ini akan menggunakan variabel 'db' sehingga error "unused" hilang
-	db.AutoMigrate(&domain.Member{})
+	db.AutoMigrate(&domain.Member{}, &domain.Package{}, &domain.Subscription{})
 
 	e := echo.New()
-
-	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
 
-	// Basic Health Check
-	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{
-			"status": "UP",
-			"message": "Gym System Backend is Running",
-		})
-	})
+	// --- DEPENDENCY INJECTION ---
+	// 1. Repository (Otot)
+	memberRepo := repository.NewMemberRepository(db)
+
+	// 2. Service (Otak)
+	memberSvc := service.NewMemberService(memberRepo)
+
+	// 3. Delivery (Mulut/API)
+	delivery.NewMemberHandler(e, memberSvc)
 
 	e.Logger.Fatal(e.Start(":" + os.Getenv("APP_PORT")))
 }
