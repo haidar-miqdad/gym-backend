@@ -53,22 +53,41 @@ func (s *subscriptionService) Subscribe(ctx context.Context, memberID, packageID
 
 	var newSub domain.Subscription
 
-	// 3. Eksekusi Atomic Transaction
+	// 3. LOGIKA STACKING (Harus SEBELUM Transaction)
+	var lastSub domain.Subscription
+	var startDate time.Time
+
+	// Cari apakah ada langganan yang masih aktif
+	err = s.db.WithContext(ctx).
+		Where("member_id = ? AND end_date > ?", mID, time.Now()).
+		Order("end_date DESC").
+		First(&lastSub).Error
+
+	if err == nil {
+		// Jika ada, langganan baru mulai saat langganan lama habis
+		startDate = lastSub.EndDate
+	} else {
+		// Jika tidak ada/expired, mulai dari sekarang
+		startDate = time.Now()
+	}
+
+	// 4. Hitung EndDate berdasarkan durasi paket
+	endDate := startDate.AddDate(0, 0, pkg.DurationDays)
+	
+	// Logic khusus paket harian (expired jam 23:59 hari yang sama)
+	// Catatan: Jika harian di-stack, dia akan expired di 23:59 di hari startDate tersebut
+	if pkg.DurationDays == 1 {
+		endDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 23, 59, 59, 0, startDate.Location())
+	}
+
+	// 5. EKSEKUSI ATOMIC TRANSACTION
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		startDate := time.Now()
-		endDate := startDate.AddDate(0, 0, pkg.DurationDays)
-
-		// Logika khusus paket harian
-		if pkg.DurationDays == 1 {
-			endDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 23, 59, 59, 0, startDate.Location())
-		}
-
 		newSub = domain.Subscription{
 			ID:        uuid.New(),
 			MemberID:  mID,
 			PackageID: pkg.ID,
-			StartDate: startDate,
-			EndDate:   endDate,
+			StartDate: startDate, // Menggunakan startDate hasil stacking
+			EndDate:   endDate,   // Menggunakan endDate hasil stacking
 			Status:    "active",
 		}
 
@@ -76,7 +95,6 @@ func (s *subscriptionService) Subscribe(ctx context.Context, memberID, packageID
 			return err
 		}
 
-		// Mencatat Payment otomatis saat subscribe
 		newPayment := domain.Payment{
 			ID:              uuid.New(),
 			SubscriptionID:  newSub.ID,
@@ -86,11 +104,8 @@ func (s *subscriptionService) Subscribe(ctx context.Context, memberID, packageID
 			Status:          "completed",
 		}
 
-		if err := s.paymentRepo.Create(ctx, tx, &newPayment); err != nil {
-    return err
-}
-
-		return nil
+		// Menggunakan repository untuk create payment
+		return s.paymentRepo.Create(ctx, tx, &newPayment)
 	})
 
 	if err != nil {
