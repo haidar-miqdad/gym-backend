@@ -18,16 +18,27 @@ func NewSubscriptionHandler(e *echo.Echo, svc service.SubscriptionService) {
 }
 
 func (h *SubscriptionHandler) Subscribe(c echo.Context) error {
+	// Definisi struct request untuk menangkap input JSON
 	var req struct {
 		MemberID  string `json:"member_id"`
 		PackageID string `json:"package_id"`
+		Method    string `json:"method"`
+		Reference string `json:"reference_number"`
 	}
 
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Format request tidak valid"})
 	}
 
-	sub, err := h.svc.Subscribe(c.Request().Context(), req.MemberID, req.PackageID)
+	// Memanggil service dengan 5 parameter sesuai kontrak baru
+	sub, err := h.svc.Subscribe(
+		c.Request().Context(), 
+		req.MemberID, 
+		req.PackageID, 
+		req.Method, 
+		req.Reference,
+	)
+	
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}

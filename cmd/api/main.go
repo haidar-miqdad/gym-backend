@@ -16,7 +16,13 @@ import (
 func main() {
 	godotenv.Load()
 	db := database.InitDB()
-	db.AutoMigrate(&domain.Member{}, &domain.Package{}, &domain.Subscription{})
+	db.AutoMigrate(
+		&domain.Member{},
+		&domain.Package{},
+		&domain.Subscription{}, 
+		&domain.Payment{},
+	)
+
 	database.SeedPackages(db)
 
 	
@@ -28,11 +34,12 @@ func main() {
 	// 1. Repository (Otot)
 	memberRepo := repository.NewMemberRepository(db)
 	subRepo := repository.NewSubscriptionRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
 
 	// 2. Service (Otak)
 	memberSvc := service.NewMemberService(memberRepo)
 	// Kita berikan 'db' ke subSvc karena dia butuh mencari data Package secara langsung
-	subSvc := service.NewSubscriptionService(subRepo, memberRepo, db)
+	subSvc := service.NewSubscriptionService(subRepo, memberRepo, paymentRepo, db)
 
 	// 3. Delivery (Mulut/API)
 	delivery.NewMemberHandler(e, memberSvc)

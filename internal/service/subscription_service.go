@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
+	"fmt" // Digunakan untuk wrapping error agar lebih informatif
 	"gym-backend/internal/domain"
 	"gym-backend/internal/repository"
 	"time"
@@ -12,62 +12,89 @@ import (
 	"gorm.io/gorm"
 )
 
+// Interface harus sama persis dengan fungsi implementasi di bawah
 type SubscriptionService interface {
-	Subscribe(ctx context.Context, memberID, packageID string) (domain.Subscription, error)
+	Subscribe(ctx context.Context, memberID, packageID, method, refNum string) (domain.Subscription, error)
 }
 
 type subscriptionService struct {
 	subRepo    repository.SubscriptionRepository
 	memberRepo repository.MemberRepository
-	// Kita butuh PackageRepo (asumsi sudah buat atau gunakan GORM langsung untuk ringkasnya)
-	db *gorm.DB 
+	paymentRepo repository.PaymentRepository
+	db         *gorm.DB
 }
 
-func NewSubscriptionService(subRepo repository.SubscriptionRepository, memberRepo repository.MemberRepository, db *gorm.DB) SubscriptionService {
-	return &subscriptionService{subRepo, memberRepo, db}
+func NewSubscriptionService(subRepo repository.SubscriptionRepository, memberRepo repository.MemberRepository, paymentRepo repository.PaymentRepository, db *gorm.DB) SubscriptionService {
+	return &subscriptionService{
+		subRepo:     subRepo,
+		memberRepo:  memberRepo,
+		paymentRepo: paymentRepo, // Masukkan ke struct
+		db:          db,
+	}
 }
 
-func (s *subscriptionService) Subscribe(ctx context.Context, memberID, packageID string) (domain.Subscription, error) {
-	// 1. Validasi Format UUID untuk MemberID
+func (s *subscriptionService) Subscribe(ctx context.Context, memberID, packageID, method, refNum string) (domain.Subscription, error) {
+	// 1. Validasi Format UUID
 	mID, err := uuid.Parse(memberID)
 	if err != nil {
-		return domain.Subscription{}, fmt.Errorf("format ID member tidak valid: %w", err)
+		return domain.Subscription{}, errors.New("format ID member tidak valid")
 	}
 
-	// 2. Cari Data Package (Cek harga & durasi)
+	pID, err := uuid.Parse(packageID)
+	if err != nil {
+		return domain.Subscription{}, errors.New("format ID paket tidak valid")
+	}
+
+	// 2. Cari Data Package
 	var pkg domain.Package
-	if err := s.db.WithContext(ctx).First(&pkg, "id = ?", packageID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.Subscription{}, errors.New("paket tidak ditemukan")
+	if err := s.db.WithContext(ctx).First(&pkg, "id = ?", pID).Error; err != nil {
+		return domain.Subscription{}, errors.New("paket tidak ditemukan")
+	}
+
+	var newSub domain.Subscription
+
+	// 3. Eksekusi Atomic Transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		startDate := time.Now()
+		endDate := startDate.AddDate(0, 0, pkg.DurationDays)
+
+		// Logika khusus paket harian
+		if pkg.DurationDays == 1 {
+			endDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 23, 59, 59, 0, startDate.Location())
 		}
-		return domain.Subscription{}, err
-	}
 
-	// 3. Hitung Tanggal (Business Logic)
-	startDate := time.Now()
-	var endDate time.Time
+		newSub = domain.Subscription{
+			ID:        uuid.New(),
+			MemberID:  mID,
+			PackageID: pkg.ID,
+			StartDate: startDate,
+			EndDate:   endDate,
+			Status:    "active",
+		}
 
-	if pkg.DurationDays == 1 {
-		// Kasus Harian: Expired jam 23:59:59 hari ini
-		endDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 23, 59, 59, 0, startDate.Location())
-	} else {
-		// Kasus Bulanan/Tahunan: Tambah hari secara normal
-		endDate = startDate.AddDate(0, 0, pkg.DurationDays)
-	}
+		if err := tx.Create(&newSub).Error; err != nil {
+			return err
+		}
 
-	// 4. Mapping ke Model (Sekarang menggunakan mID yang sudah divalidasi)
-	newSub := domain.Subscription{
-		ID:        uuid.New(),
-		MemberID:  mID, // Menggunakan hasil parse yang sukses
-		PackageID: pkg.ID,
-		StartDate: startDate,
-		EndDate:   endDate,
-		Status:    "active",
-	}
+		// Mencatat Payment otomatis saat subscribe
+		newPayment := domain.Payment{
+			ID:              uuid.New(),
+			SubscriptionID:  newSub.ID,
+			Amount:          pkg.Price,
+			Method:          method,
+			ReferenceNumber: refNum,
+			Status:          "completed",
+		}
 
-	// 5. Simpan (Gunakan Repository)
-	if err := s.subRepo.Create(ctx, &newSub); err != nil {
-		return domain.Subscription{}, fmt.Errorf("gagal memproses langganan: %w", err)
+		if err := s.paymentRepo.Create(ctx, tx, &newPayment); err != nil {
+    return err
+}
+
+		return nil
+	})
+
+	if err != nil {
+		return domain.Subscription{}, fmt.Errorf("gagal memproses transaksi: %w", err)
 	}
 
 	return newSub, nil

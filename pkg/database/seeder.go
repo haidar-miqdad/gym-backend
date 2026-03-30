@@ -17,7 +17,7 @@ func SeedPackages(db *gorm.DB) {
 		},
 		{
 			ID:           uuid.New(),
-			Name:         "Monthly Member",
+			Name:         "Monthly Membership",
 			DurationDays: 30,
 			Price:        300000,
 			IsActive:     true,
@@ -25,7 +25,7 @@ func SeedPackages(db *gorm.DB) {
 	}
 
 	for _, pkg := range packages {
-		// FirstOrCreate mencegah duplikasi data saat server restart
+		// Cek berdasarkan Nama, jika belum ada baru buat
 		db.Where(domain.Package{Name: pkg.Name}).FirstOrCreate(&pkg)
 	}
 }
