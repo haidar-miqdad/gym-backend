@@ -21,6 +21,7 @@ type MemberService interface {
 
 type memberService struct {
 	repo repository.MemberRepository
+	accessLogRepo repository.AccessLogRepository
 	db   *gorm.DB
 }
 
@@ -32,10 +33,11 @@ type MemberStatusResponse struct {
 	EndDate     time.Time `json:"end_date"`
 }
 
-func NewMemberService(repo repository.MemberRepository, db *gorm.DB) MemberService {
+func NewMemberService(repo repository.MemberRepository, logRepo repository.AccessLogRepository, db *gorm.DB) MemberService {
 	return &memberService{
-		repo: repo,
-		db:   db, // Masukkan koneksi DB ke dalam service
+		repo:          repo,
+		accessLogRepo: logRepo,
+		db:            db,
 	}
 }
 
@@ -100,6 +102,22 @@ func (s *memberService) GetMemberStatus(ctx context.Context, memberID string) (M
 	// 3. Hitung sisa hari
 	daysLeft := int(time.Until(sub.EndDate).Hours() / 24)
 	if daysLeft < 0 { daysLeft = 0 }
+
+	// 4. Buat response
+	mID, err := uuid.Parse(memberID)
+	if err != nil {
+		return MemberStatusResponse{}, errors.New("format ID member tidak valid")
+	}
+
+	go func() {
+        log := domain.AccessLog{
+            ID:             uuid.New(),
+            MemberID:       mID,
+            SubscriptionID: sub.ID,
+            CheckInAt:      time.Now(),
+        }
+        s.accessLogRepo.Create(context.Background(), &log)
+    }()
 
 	return MemberStatusResponse{
 		IsActive:    true,

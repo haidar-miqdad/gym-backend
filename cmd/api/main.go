@@ -21,6 +21,7 @@ func main() {
 		&domain.Package{},
 		&domain.Subscription{}, 
 		&domain.Payment{},
+		&domain.AccessLog{},
 	)
 
 	database.SeedPackages(db)
@@ -35,9 +36,10 @@ func main() {
 	memberRepo := repository.NewMemberRepository(db)
 	subRepo := repository.NewSubscriptionRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
+	accessLogRepo := repository.NewAccessLogRepository(db)
 
 	// 2. Service (Otak)
-	memberSvc := service.NewMemberService(memberRepo, db)
+	memberSvc := service.NewMemberService(memberRepo, accessLogRepo,db)
 	// Kita berikan 'db' ke subSvc karena dia butuh mencari data Package secara langsung
 	subSvc := service.NewSubscriptionService(subRepo, memberRepo, paymentRepo, db)
 
