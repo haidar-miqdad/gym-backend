@@ -37,11 +37,13 @@ func main() {
 	subRepo := repository.NewSubscriptionRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	accessLogRepo := repository.NewAccessLogRepository(db)
+	reportRepo := repository.NewReportRepository(db)
 
 	// 2. Service (Otak)
 	memberSvc := service.NewMemberService(memberRepo, accessLogRepo,db)
 	// Kita berikan 'db' ke subSvc karena dia butuh mencari data Package secara langsung
 	subSvc := service.NewSubscriptionService(subRepo, memberRepo, paymentRepo, db)
+	reportSvc := service.NewReportService(reportRepo)
 
 	// 3. Delivery (Mulut/API)
 	delivery.NewMemberHandler(e, memberSvc)
@@ -49,6 +51,7 @@ func main() {
 	// 4. Initialize Handlers
 	delivery.NewMemberHandler(e, memberSvc)
 	delivery.NewSubscriptionHandler(e, subSvc)
+	delivery.NewReportHandler(e, reportSvc)
 
 	e.Logger.Fatal(e.Start(":" + os.Getenv("APP_PORT")))
 }
