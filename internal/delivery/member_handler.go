@@ -22,6 +22,7 @@ func NewMemberHandler(e *echo.Echo, svc service.MemberService) {
 	api := e.Group("/api/v1")
 	api.POST("/members", h.RegisterMember)
 	api.GET("/members", h.GetAllMembers)
+	api.GET("/members/:id/status", h.GetStatus)
 }
 
 func (h *MemberHandler) RegisterMember(c echo.Context) error {
@@ -60,4 +61,16 @@ func (h *MemberHandler) GetAllMembers(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, members)
+}
+
+// GET /api/v1/members/:id/status
+func (h *MemberHandler) GetStatus(c echo.Context) error {
+	id := c.Param("id")
+	
+	status, err := h.svc.GetMemberStatus(c.Request().Context(), id)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, status)
 }

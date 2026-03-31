@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"gym-backend/internal/domain"
 	"gym-backend/internal/repository"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -15,15 +16,26 @@ import (
 type MemberService interface {
 	Register(ctx context.Context, name, phone string) (domain.Member, error)
 	GetAllMembers(ctx context.Context) ([]domain.Member, error)
+	GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error)
 }
 
 type memberService struct {
 	repo repository.MemberRepository
+	db   *gorm.DB
 }
 
-func NewMemberService(repo repository.MemberRepository) MemberService {
+type MemberStatusResponse struct {
+	IsActive    bool      `json:"is_active"`
+	Message     string    `json:"message"`
+	PackageName string    `json:"package_name,omitempty"`
+	DaysLeft    int       `json:"days_left"`
+	EndDate     time.Time `json:"end_date"`
+}
+
+func NewMemberService(repo repository.MemberRepository, db *gorm.DB) MemberService {
 	return &memberService{
 		repo: repo,
+		db:   db, // Masukkan koneksi DB ke dalam service
 	}
 }
 
@@ -63,4 +75,36 @@ func (s *memberService) Register(ctx context.Context, name, phone string) (domai
 
 func (s *memberService) GetAllMembers(ctx context.Context) ([]domain.Member, error) {
 	return s.repo.FindAll(ctx)
+}
+
+func (s *memberService) GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error) {
+	// 1. Cek apakah member ada
+	_, err := s.repo.GetByID(ctx, memberID)
+	if err != nil {
+		return MemberStatusResponse{}, errors.New("member tidak ditemukan")
+	}
+
+	// 2. Cari subscription aktif melalui subRepo
+	// (Catatan: Pastikan memberService punya akses ke subRepo atau gunakan DB langsung)
+	var sub domain.Subscription
+	err = s.db.Where("member_id = ? AND start_date <= ? AND end_date >= ?", 
+		memberID, time.Now(), time.Now()).First(&sub).Error
+
+	if err != nil {
+		return MemberStatusResponse{
+			IsActive: false,
+			Message:  "Akses Ditolak: Tidak ada paket aktif atau sudah expired",
+		}, nil
+	}
+
+	// 3. Hitung sisa hari
+	daysLeft := int(time.Until(sub.EndDate).Hours() / 24)
+	if daysLeft < 0 { daysLeft = 0 }
+
+	return MemberStatusResponse{
+		IsActive:    true,
+		Message:     "Akses Diterima",
+		DaysLeft:    daysLeft,
+		EndDate:     sub.EndDate,
+	}, nil
 }

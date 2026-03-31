@@ -15,6 +15,7 @@ type MemberRepository interface {
 	FindAll(ctx context.Context) ([]domain.Member, error)
 	Update(ctx context.Context, member *domain.Member) error
 	FindByPhone(ctx context.Context, phone string) (domain.Member, error)
+	GetByID(ctx context.Context, id string) (domain.Member, error)
 }
 
 type memberRepository struct {
@@ -27,6 +28,13 @@ func NewMemberRepository(db *gorm.DB) MemberRepository {
 		db: db,
 	}
 }
+
+func (r *memberRepository) GetByID(ctx context.Context, id string) (domain.Member, error) {
+    var member domain.Member
+    err := r.db.WithContext(ctx).First(&member, "id = ?", id).Error
+    return member, err
+}
+
 
 func (r *memberRepository) Create(ctx context.Context, member *domain.Member) error {
 	// Menggunakan WithContext untuk mendukung cancellation dan tracing.

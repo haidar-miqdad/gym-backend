@@ -37,7 +37,7 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 
 	// 2. Service (Otak)
-	memberSvc := service.NewMemberService(memberRepo)
+	memberSvc := service.NewMemberService(memberRepo, db)
 	// Kita berikan 'db' ke subSvc karena dia butuh mencari data Package secara langsung
 	subSvc := service.NewSubscriptionService(subRepo, memberRepo, paymentRepo, db)
 

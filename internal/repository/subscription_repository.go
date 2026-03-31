@@ -34,3 +34,16 @@ func (r *subscriptionRepository) FindActiveByMemberID(ctx context.Context, membe
 		First(&sub).Error
 	return sub, err
 }
+
+func (r *subscriptionRepository) GetActiveSubscription(ctx context.Context, memberID string) (domain.Subscription, error) {
+	var sub domain.Subscription
+	now := time.Now()
+
+	// Logika: Mencari subscription yang rentang waktunya mencakup detik ini
+	err := r.db.WithContext(ctx).
+		Where("member_id = ? AND start_date <= ? AND end_date >= ? AND status = ?", 
+			memberID, now, now, "active").
+		First(&sub).Error
+
+	return sub, err
+}
