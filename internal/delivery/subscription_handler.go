@@ -1,8 +1,11 @@
 package delivery
 
 import (
+	"gym-backend/internal/middleware"
 	"gym-backend/internal/service"
 	"net/http"
+
+	"github.com/casbin/casbin/v3"
 	"github.com/labstack/echo/v4"
 )
 
@@ -10,10 +13,10 @@ type SubscriptionHandler struct {
 	svc service.SubscriptionService
 }
 
-func NewSubscriptionHandler(g *echo.Group, svc service.SubscriptionService) {
+func NewSubscriptionHandler(g *echo.Group, svc service.SubscriptionService, enforcer *casbin.Enforcer) {
 	h := &SubscriptionHandler{svc}
 	
-	g.POST("/subscriptions", h.Subscribe)
+	g.POST("/subscriptions", h.Subscribe, middleware.CheckPermission(enforcer, "subscriptions", "create"))
 }
 
 func (h *SubscriptionHandler) Subscribe(c echo.Context) error {

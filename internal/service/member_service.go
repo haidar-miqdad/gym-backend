@@ -15,7 +15,8 @@ import (
 
 type MemberService interface {
 	Register(ctx context.Context, name, phone string) (domain.Member, error)
-	GetAllMembers(ctx context.Context) ([]domain.Member, error)
+	// Update signature agar sesuai dengan implementasi
+	GetAllMembers(ctx context.Context, page, limit int) ([]domain.Member, error)
 	GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error)
 }
 
@@ -42,25 +43,19 @@ func NewMemberService(repo repository.MemberRepository, logRepo repository.Acces
 }
 
 func (s *memberService) Register(ctx context.Context, name, phone string) (domain.Member, error) {
-	// 1. Validasi Input (WAJIB pakai IF dan RETURN)
 	if name == "" || phone == "" {
 		return domain.Member{}, errors.New("nama dan nomor telepon wajib diisi")
 	}
 
-	// 2. Cek Duplikasi (Pakai "_" karena existingMember tidak kita pakai datanya)
 	_, err := s.repo.FindByPhone(ctx, phone)
-	
-	// Jika err == nil, artinya data DITEMUKAN (berarti duplikat)
 	if err == nil {
 		return domain.Member{}, fmt.Errorf("nomor telepon %s sudah terdaftar", phone)
 	}
 	
-	// Jika error-nya bukan 'Record Not Found', berarti ada masalah di database
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return domain.Member{}, err
 	}
 
-	// 3. Buat Member Baru
 	newMember := domain.Member{
 		ID:     uuid.New(),
 		Name:   name,
@@ -75,21 +70,20 @@ func (s *memberService) Register(ctx context.Context, name, phone string) (domai
 	return newMember, nil
 }
 
-func (s *memberService) GetAllMembers(ctx context.Context) ([]domain.Member, error) {
-	return s.repo.FindAll(ctx)
+// Tambahkan ctx ke parameter agar implementasi memenuhi interface
+func (s *memberService) GetAllMembers(ctx context.Context, page, limit int) ([]domain.Member, error) {
+	offset := (page - 1) * limit
+	return s.repo.GetAll(ctx, limit, offset)
 }
 
 func (s *memberService) GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error) {
-	// 1. Cek apakah member ada
 	_, err := s.repo.GetByID(ctx, memberID)
 	if err != nil {
 		return MemberStatusResponse{}, errors.New("member tidak ditemukan")
 	}
 
-	// 2. Cari subscription aktif melalui subRepo
-	// (Catatan: Pastikan memberService punya akses ke subRepo atau gunakan DB langsung)
 	var sub domain.Subscription
-	err = s.db.Where("member_id = ? AND start_date <= ? AND end_date >= ?", 
+	err = s.db.WithContext(ctx).Where("member_id = ? AND start_date <= ? AND end_date >= ?", 
 		memberID, time.Now(), time.Now()).First(&sub).Error
 
 	if err != nil {
@@ -99,16 +93,10 @@ func (s *memberService) GetMemberStatus(ctx context.Context, memberID string) (M
 		}, nil
 	}
 
-	// 3. Hitung sisa hari
 	daysLeft := int(time.Until(sub.EndDate).Hours() / 24)
 	if daysLeft < 0 { daysLeft = 0 }
 
-	// 4. Buat response
-	mID, err := uuid.Parse(memberID)
-	if err != nil {
-		return MemberStatusResponse{}, errors.New("format ID member tidak valid")
-	}
-
+	mID, _ := uuid.Parse(memberID)
 	go func() {
         log := domain.AccessLog{
             ID:             uuid.New(),

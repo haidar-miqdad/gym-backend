@@ -33,16 +33,24 @@ func SeedPackages(db *gorm.DB) {
 }
 
 func SeedAdmin(db *gorm.DB) {
-	password := "admin123" // Password mentah
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    hash, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+    admin := domain.User{
+        Username: "admin",
+        Password: string(hash),
+        Role:     "admin",
+    }
 
-	admin := domain.User{
-		ID:       uuid.New(),
-		Username: "admin",
-		Password: string(hash),
-		Role:     "admin",
-	}
+    // Gunakan ini untuk mencegah error duplicate key
+    db.Where(domain.User{Username: "admin"}).FirstOrCreate(&admin)
+}
 
-	// FirstOrCreate mencegah duplikasi saat restart server
-	db.Where(domain.User{Username: admin.Username}).FirstOrCreate(&admin)
+func SeedStaff(db *gorm.DB) {
+    hash, _ := bcrypt.GenerateFromPassword([]byte("staff123"), bcrypt.DefaultCost)
+    staff := domain.User{
+        Username: "staff",
+        Password: string(hash),
+        Role:     "staff",
+    }
+    // Gunakan FirstOrCreate untuk menghindari error duplicate key yang Anda alami sebelumnya
+    db.Where(domain.User{Username: "staff"}).FirstOrCreate(&staff)
 }

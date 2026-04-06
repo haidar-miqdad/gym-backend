@@ -1,9 +1,12 @@
 package delivery
 
 import (
+	"gym-backend/internal/middleware"
 	"gym-backend/internal/service"
 	"net/http"
 	"time"
+
+	"github.com/casbin/casbin/v3"
 	"github.com/labstack/echo/v4"
 )
 
@@ -11,10 +14,11 @@ type ReportHandler struct {
 	svc service.ReportService
 }
 
-func NewReportHandler(g *echo.Group, svc service.ReportService) {
-	h := &ReportHandler{svc}
-	
-	g.GET("/reports/daily", h.GetDailyReport)
+func NewReportHandler(g *echo.Group, svc service.ReportService, enforcer *casbin.Enforcer) {
+    h := &ReportHandler{svc}
+    
+    // Pasang middleware permission di sini
+    g.GET("/reports/daily", h.GetDailyReport, middleware.CheckPermission(enforcer, "reports", "view"))
 }
 
 func (h *ReportHandler) GetDailyReport(c echo.Context) error {
