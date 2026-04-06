@@ -9,22 +9,28 @@ import (
 func CheckPermission(enforcer *casbin.Enforcer, obj string, act string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// 1. Ambil role yang disuntikkan JWTMiddleware sebelumnya
-			role, ok := c.Get("role").(string)
+			// 1. Ambil roles (slice) dari context JWT
+			rolesInterface := c.Get("roles")
+			roles, ok := rolesInterface.([]interface{})
 			if !ok {
-				return c.JSON(http.StatusForbidden, map[string]string{"error": "Role tidak ditemukan"})
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "Roles tidak ditemukan"})
 			}
 
-			// 2. Tanya ke Casbin: "Apakah role [admin] boleh [view] pada [reports]?"
-			// Casbin akan mencocokkan dengan data di TablePlus Anda tadi
-			ok, err := enforcer.Enforce(role, obj, act)
-			if err != nil || !ok {
-				return c.JSON(http.StatusForbidden, map[string]string{
-					"error": "Akses ditolak: Anda tidak punya izin " + act + " untuk " + obj,
-				})
+			// 2. Iterasi setiap role
+			for _, r := range roles {
+				roleName := r.(string)
+				// 3. Tanya ke Casbin untuk setiap role
+				allowed, _ := enforcer.Enforce(roleName, obj, act)
+				if allowed {
+					// Jika salah satu role diizinkan, langsung lanjut ke handler
+					return next(c)
+				}
 			}
 
-			return next(c)
+			// 4. Jika semua role tidak ada yang cocok
+			return c.JSON(http.StatusForbidden, map[string]string{
+				"error": "Akses ditolak: Tidak ada role Anda yang memiliki izin " + act,
+			})
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"gym-backend/internal/domain"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -35,10 +36,12 @@ func (s *authService) Login(username, password string) (string, error) {
 		return "", errors.New("username atau password salah")
 	}
 
+	roles := strings.Split(user.Roles, ",")
+
 	// Buat JWT Token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
-		"role":    user.Role,
+		"roles":    roles,
 		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Berlaku 24 jam
 	})
 

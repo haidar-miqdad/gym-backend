@@ -49,25 +49,37 @@ func main() {
 	}
 	enforcer.LoadPolicy()
 
-	hasManagePermission, _ := enforcer.HasPolicy("admin", "permissions", "manage")
-if !hasManagePermission {
-    enforcer.AddPolicy("admin", "permissions", "manage")
-}
+	// --- BAGIAN PERUBAHAN: IDEMPOTENT POLICY SEEDING ---
 
-	// 3. Idempotent Policy Seeding (Cek dulu sebelum tambah agar tidak duplikat)
+	// Izin Mengelola Permission (Hanya Admin)
+	hasManagePermission, _ := enforcer.HasPolicy("admin", "permissions", "manage")
+	if !hasManagePermission {
+		enforcer.AddPolicy("admin", "permissions", "manage")
+	}
+
+	// Izin Laporan (Hanya Admin)
 	hasReportPolicy, _ := enforcer.HasPolicy("admin", "reports", "view")
 	if !hasReportPolicy {
 		enforcer.AddPolicy("admin", "reports", "view")
 	}
 
+	// Izin Member (Hanya Staff)
 	hasStaffPolicy, _ := enforcer.HasPolicy("staff", "members", "view")
-if !hasStaffPolicy {
-    enforcer.AddPolicy("staff", "members", "view")
-}
+	if !hasStaffPolicy {
+		enforcer.AddPolicy("staff", "members", "view")
+	}
 
+	// Izin Membuat Member (Admin)
 	hasMemberPolicy, _ := enforcer.HasPolicy("admin", "members", "create")
 	if !hasMemberPolicy {
 		enforcer.AddPolicy("admin", "members", "create")
+	}
+
+	// --- PERUBAHAN KRUSIAL: RBAC INHERITANCE (GROUPING POLICY) ---
+	// Membuat Admin otomatis memiliki semua izin yang dimiliki Staff
+	hasAdminStaffLink, _ := enforcer.HasGroupingPolicy("admin", "staff")
+	if !hasAdminStaffLink {
+		enforcer.AddGroupingPolicy("admin", "staff")
 	}
 
 	// 4. Dependency Injection (DI)
@@ -84,11 +96,10 @@ if !hasStaffPolicy {
 
 	// 5. Route Grouping Logic
 	v1 := e.Group("/api/v1")
-
 	protected := v1.Group("") 
 	protected.Use(middleware.JWTMiddleware)
 
-	// 6. Initialize Handlers (Sertakan enforcer agar bisa pakai middleware permission)
+	// 6. Initialize Handlers
 	delivery.NewAuthHandler(v1, authSvc)
 	delivery.NewReportHandler(protected, reportSvc, enforcer) 
 	delivery.NewSubscriptionHandler(protected, subSvc, enforcer)
