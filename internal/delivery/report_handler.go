@@ -11,11 +11,10 @@ type ReportHandler struct {
 	svc service.ReportService
 }
 
-func NewReportHandler(e *echo.Echo, svc service.ReportService) {
+func NewReportHandler(g *echo.Group, svc service.ReportService) {
 	h := &ReportHandler{svc}
 	
-	api := e.Group("/api/v1/reports")
-	api.GET("/daily", h.GetDailyReport)
+	g.GET("/reports/daily", h.GetDailyReport)
 }
 
 func (h *ReportHandler) GetDailyReport(c echo.Context) error {

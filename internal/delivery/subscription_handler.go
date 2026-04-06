@@ -10,11 +10,10 @@ type SubscriptionHandler struct {
 	svc service.SubscriptionService
 }
 
-func NewSubscriptionHandler(e *echo.Echo, svc service.SubscriptionService) {
+func NewSubscriptionHandler(g *echo.Group, svc service.SubscriptionService) {
 	h := &SubscriptionHandler{svc}
 	
-	api := e.Group("/api/v1")
-	api.POST("/subscriptions", h.Subscribe)
+	g.POST("/subscriptions", h.Subscribe)
 }
 
 func (h *SubscriptionHandler) Subscribe(c echo.Context) error {

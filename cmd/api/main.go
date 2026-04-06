@@ -3,6 +3,7 @@ package main
 import (
 	"gym-backend/internal/delivery"
 	"gym-backend/internal/domain"
+	"gym-backend/internal/middleware"
 	"gym-backend/internal/repository"
 	"gym-backend/internal/service"
 	"gym-backend/pkg/database"
@@ -10,48 +11,65 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
 	godotenv.Load()
 	db := database.InitDB()
+	
+	// 1. Database Migration & Seeding
 	db.AutoMigrate(
 		&domain.Member{},
 		&domain.Package{},
 		&domain.Subscription{}, 
 		&domain.Payment{},
 		&domain.AccessLog{},
+		&domain.User{},
 	)
-
 	database.SeedPackages(db)
+	database.SeedAdmin(db)
 
-	
+	// 2. Echo Instance & Global Middleware
 	e := echo.New()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	e.Use(echoMiddleware.Logger())
+	e.Use(echoMiddleware.Recover())
 
-	// --- DEPENDENCY INJECTION ---
-	// 1. Repository (Otot)
+	// 3. Dependency Injection (DI)
+	// Repositories
 	memberRepo := repository.NewMemberRepository(db)
 	subRepo := repository.NewSubscriptionRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	accessLogRepo := repository.NewAccessLogRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 
-	// 2. Service (Otak)
-	memberSvc := service.NewMemberService(memberRepo, accessLogRepo,db)
-	// Kita berikan 'db' ke subSvc karena dia butuh mencari data Package secara langsung
+	// Services
+	memberSvc := service.NewMemberService(memberRepo, accessLogRepo, db)
 	subSvc := service.NewSubscriptionService(subRepo, memberRepo, paymentRepo, db)
 	reportSvc := service.NewReportService(reportRepo)
+	authSvc := service.NewAuthService(db)
 
-	// 3. Delivery (Mulut/API)
-	delivery.NewMemberHandler(e, memberSvc)
+	// 4. Route Grouping Logic (Nesting Strategy)
+// Kita buat base group v1 sebagai "payung" besar
+v1 := e.Group("/api/v1")
 
-	// 4. Initialize Handlers
-	delivery.NewMemberHandler(e, memberSvc)
-	delivery.NewSubscriptionHandler(e, subSvc)
-	delivery.NewReportHandler(e, reportSvc)
+// Kita buat sub-group "protected" di bawah v1. 
+// Path kosong "" berarti prefixnya tetap /api/v1
+protected := v1.Group("") 
+protected.Use(middleware.JWTMiddleware)
 
-	e.Logger.Fatal(e.Start(":" + os.Getenv("APP_PORT")))
+// 5. Initialize Handlers
+// Handler Login: Daftarkan ke v1 (Public / Tanpa Gembok)
+delivery.NewAuthHandler(v1, authSvc)
+
+// Handler Report & Subscription: Daftarkan ke protected (Wajib Token)
+delivery.NewReportHandler(protected, reportSvc)
+delivery.NewSubscriptionHandler(protected, subSvc)
+
+// Handler Member: v1 untuk rute publik (status), protected untuk rute admin (CRUD)
+delivery.NewMemberHandler(v1, protected, memberSvc)
+
+	port := os.Getenv("APP_PORT")
+if port == "" { port = "8080" }
+e.Logger.Fatal(e.Start(":" + port))
 }

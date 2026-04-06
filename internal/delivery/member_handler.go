@@ -12,17 +12,15 @@ type MemberHandler struct {
 	svc service.MemberService
 }
 
-// NewMemberHandler menginisialisasi rute-rute API untuk Member.
-func NewMemberHandler(e *echo.Echo, svc service.MemberService) {
-	h := &MemberHandler{
-		svc: svc,
-	}
-
-	// Grouping API v1
-	api := e.Group("/api/v1")
-	api.POST("/members", h.RegisterMember)
-	api.GET("/members", h.GetAllMembers)
-	api.GET("/members/:id/status", h.GetStatus)
+func NewMemberHandler(public *echo.Group, protected *echo.Group, svc service.MemberService) {
+	h := &MemberHandler{svc}
+	
+	// Rute ini tidak butuh token (Public Group)
+	public.GET("/members/:id/status", h.GetStatus)
+	
+	// Rute ini wajib token (Protected Group)
+	protected.POST("/members", h.RegisterMember)
+	protected.GET("/members", h.GetAllMembers)
 }
 
 func (h *MemberHandler) RegisterMember(c echo.Context) error {

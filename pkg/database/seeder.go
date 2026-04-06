@@ -2,7 +2,9 @@ package database
 
 import (
 	"gym-backend/internal/domain"
+
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -28,4 +30,19 @@ func SeedPackages(db *gorm.DB) {
 		// Cek berdasarkan Nama, jika belum ada baru buat
 		db.Where(domain.Package{Name: pkg.Name}).FirstOrCreate(&pkg)
 	}
+}
+
+func SeedAdmin(db *gorm.DB) {
+	password := "admin123" // Password mentah
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	admin := domain.User{
+		ID:       uuid.New(),
+		Username: "admin",
+		Password: string(hash),
+		Role:     "admin",
+	}
+
+	// FirstOrCreate mencegah duplikasi saat restart server
+	db.Where(domain.User{Username: admin.Username}).FirstOrCreate(&admin)
 }
