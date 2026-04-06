@@ -36,7 +36,7 @@ func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		// Simpan data user ke context agar bisa dipakai di handler jika butuh
 		claims := token.Claims.(jwt.MapClaims)
 		c.Set("user_id", claims["user_id"])
-		c.Set("role", claims["role"])
+		c.Set("roles", claims["roles"])
 
 		return next(c)
 	}

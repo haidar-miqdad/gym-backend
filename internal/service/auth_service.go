@@ -36,14 +36,25 @@ func (s *authService) Login(username, password string) (string, error) {
 		return "", errors.New("username atau password salah")
 	}
 
-	roles := strings.Split(user.Roles, ",")
+	if user.Roles == "" {
+    return "", errors.New("user tidak memiliki role yang terdefinisi")
+}
 
-	// Buat JWT Token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"roles":    roles,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Berlaku 24 jam
-	})
+rawRoles := strings.Split(user.Roles, ",")
+var roles []string
+for _, r := range rawRoles {
+    trimmed := strings.TrimSpace(r)
+    if trimmed != "" { // Pastikan hanya memasukkan string yang punya isi
+        roles = append(roles, trimmed)
+    }
+}
+
+// Gunakan slice 'roles' yang sudah bersih ini untuk JWT
+token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+    "user_id": user.ID,
+    "roles":   roles,
+    "exp":     time.Now().Add(time.Hour * 24).Unix(),
+})
 
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }
