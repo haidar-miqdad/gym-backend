@@ -9,6 +9,7 @@ type Subscription struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	MemberID  uuid.UUID `gorm:"type:uuid;index" json:"member_id"`
 	PackageID uuid.UUID `gorm:"type:uuid" json:"package_id"`
+	Package   Package   `gorm:"foreignKey:PackageID" json:"package"`
 	StartDate time.Time `json:"start_date"`
 	EndDate   time.Time `json:"end_date"`
 	Status    string    `gorm:"default:active" json:"status"` // active, expired, cancelled

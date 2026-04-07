@@ -15,7 +15,7 @@ import (
 
 type MemberService interface {
 	Register(ctx context.Context, name, phone string) (domain.Member, error)
-	// Update signature agar sesuai dengan implementasi
+	CheckIn(ctx context.Context, memberID string) (MemberStatusResponse, error)
 	GetAllMembers(ctx context.Context, page, limit int) ([]domain.Member, error)
 	GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error)
 }
@@ -76,41 +76,52 @@ func (s *memberService) GetAllMembers(ctx context.Context, page, limit int) ([]d
 	return s.repo.GetAll(ctx, limit, offset)
 }
 
+// Implementasi GetMemberStatus (Hanya Query/Read)
 func (s *memberService) GetMemberStatus(ctx context.Context, memberID string) (MemberStatusResponse, error) {
-	_, err := s.repo.GetByID(ctx, memberID)
-	if err != nil {
-		return MemberStatusResponse{}, errors.New("member tidak ditemukan")
-	}
-
 	var sub domain.Subscription
-	err = s.db.WithContext(ctx).Where("member_id = ? AND start_date <= ? AND end_date >= ?", 
-		memberID, time.Now(), time.Now()).First(&sub).Error
+	// Tambahkan Preload("Package") agar kita tahu nama paketnya
+	err := s.db.WithContext(ctx).
+		Preload("Package").
+		Where("member_id = ? AND start_date <= ? AND end_date >= ?", memberID, time.Now(), time.Now()).
+		First(&sub).Error
 
 	if err != nil {
-		return MemberStatusResponse{
-			IsActive: false,
-			Message:  "Akses Ditolak: Tidak ada paket aktif atau sudah expired",
-		}, nil
+		return MemberStatusResponse{IsActive: false, Message: "Tidak ada paket aktif"}, nil
 	}
-
-	daysLeft := int(time.Until(sub.EndDate).Hours() / 24)
-	if daysLeft < 0 { daysLeft = 0 }
-
-	mID, _ := uuid.Parse(memberID)
-	go func() {
-        log := domain.AccessLog{
-            ID:             uuid.New(),
-            MemberID:       mID,
-            SubscriptionID: sub.ID,
-            CheckInAt:      time.Now(),
-        }
-        s.accessLogRepo.Create(context.Background(), &log)
-    }()
 
 	return MemberStatusResponse{
 		IsActive:    true,
-		Message:     "Akses Diterima",
-		DaysLeft:    daysLeft,
+		Message:     "Paket Aktif",
+		PackageName: sub.Package.Name,
 		EndDate:     sub.EndDate,
+		DaysLeft:    int(time.Until(sub.EndDate).Hours() / 24),
 	}, nil
+}
+
+// Implementasi CheckIn (Command/Write)
+func (s *memberService) CheckIn(ctx context.Context, memberID string) (MemberStatusResponse, error) {
+	// 1. Cek status (Gunakan fungsi yang sudah ada)
+	status, err := s.GetMemberStatus(ctx, memberID)
+	if err != nil || !status.IsActive {
+		return status, errors.New("akses ditolak: " + status.Message)
+	}
+
+	// 2. Ambil data subscription ID untuk logging
+	var sub domain.Subscription
+	s.db.Where("member_id = ? AND status = 'active'", memberID).First(&sub)
+
+	// 3. Catat ke AccessLog (Hanya dilakukan di fungsi POST ini)
+	mID, _ := uuid.Parse(memberID)
+	log := domain.AccessLog{
+		ID:             uuid.New(),
+		MemberID:       mID,
+		SubscriptionID: sub.ID,
+		CheckInAt:      time.Now(),
+	}
+	
+	if err := s.accessLogRepo.Create(ctx, &log); err != nil {
+		return status, fmt.Errorf("gagal mencatat kehadiran: %w", err)
+	}
+
+	return status, nil
 }

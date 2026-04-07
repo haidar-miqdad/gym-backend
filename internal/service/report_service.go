@@ -6,14 +6,9 @@ import (
 	"time"
 )
 
-type DailyReportResponse struct {
-	Date            string  `json:"date"`
-	TotalRevenue    float64 `json:"total_revenue"`
-	TotalAttendance int64   `json:"total_attendance"`
-}
-
 type ReportService interface {
-	GetDailyReport(ctx context.Context, date time.Time) (DailyReportResponse, error)
+	// Nama fungsi ini HARUS sesuai dengan yang dipanggil di handler
+	GetDailyReport(ctx context.Context, date time.Time) (map[string]interface{}, error)
 }
 
 type reportService struct {
@@ -24,20 +19,16 @@ func NewReportService(repo repository.ReportRepository) ReportService {
 	return &reportService{repo}
 }
 
-func (s *reportService) GetDailyReport(ctx context.Context, date time.Time) (DailyReportResponse, error) {
-	revenue, err := s.repo.GetTotalRevenueByDate(ctx, date)
-	if err != nil {
-		return DailyReportResponse{}, err
-	}
+func (s *reportService) GetDailyReport(ctx context.Context, date time.Time) (map[string]interface{}, error) {
+	revenue, err := s.repo.GetDailyRevenue(ctx, date)
+	if err != nil { return nil, err }
 
-	attendance, err := s.repo.GetTotalAttendanceByDate(ctx, date)
-	if err != nil {
-		return DailyReportResponse{}, err
-	}
+	attendance, err := s.repo.GetDailyAttendanceCount(ctx, date)
+	if err != nil { return nil, err }
 
-	return DailyReportResponse{
-		Date:            date.Format("2006-01-02"),
-		TotalRevenue:    revenue,
-		TotalAttendance: attendance,
+	return map[string]interface{}{
+		"date":             date.Format("2006-01-02"),
+		"daily_revenue":    revenue,
+		"today_attendance": attendance,
 	}, nil
 }

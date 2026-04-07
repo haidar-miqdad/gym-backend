@@ -20,9 +20,7 @@ func NewPaymentRepository(db *gorm.DB) PaymentRepository {
 
 func (r *paymentRepository) Create(ctx context.Context, tx *gorm.DB, payment *domain.Payment) error {
 	// Jika tx disediakan (dari service), gunakan tx tersebut. Jika tidak, gunakan r.db default.
-	db := r.db
-	if tx != nil {
-		db = tx
-	}
-	return db.WithContext(ctx).Create(payment).Error
+	db := tx
+    if db == nil { db = r.db }
+    return db.WithContext(ctx).Create(payment).Error
 }

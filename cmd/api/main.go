@@ -16,6 +16,7 @@ import (
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
 
+
 func main() {
 	godotenv.Load()
 	db := database.InitDB()
@@ -75,6 +76,21 @@ func main() {
 		enforcer.AddPolicy("admin", "members", "create")
 	}
 
+	hasSubPolicy, _ := enforcer.HasPolicy("admin", "subscriptions", "create")
+	if !hasSubPolicy {
+		enforcer.AddPolicy("admin", "subscriptions", "create")
+	}
+
+	hasCheckInPolicy, _ := enforcer.HasPolicy("admin", "attendance", "create")
+	if !hasCheckInPolicy {
+		enforcer.AddPolicy("admin", "attendance", "create")
+	}
+
+	hasViewReport, _ := enforcer.HasPolicy("admin", "reports", "view")
+	if !hasViewReport {
+		enforcer.AddPolicy("admin", "reports", "view")
+	}
+
 	// --- PERUBAHAN KRUSIAL: RBAC INHERITANCE (GROUPING POLICY) ---
 	// Membuat Admin otomatis memiliki semua izin yang dimiliki Staff
 	hasAdminStaffLink, _ := enforcer.HasGroupingPolicy("admin", "staff")
@@ -105,6 +121,7 @@ func main() {
 	delivery.NewSubscriptionHandler(protected, subSvc, enforcer)
 	delivery.NewMemberHandler(v1, protected, memberSvc, enforcer)
 	delivery.NewPermissionHandler(protected, enforcer)
+	delivery.NewAccessLogHandler(protected, memberSvc)
 
 	port := os.Getenv("APP_PORT")
 	if port == "" { port = "8080" }
